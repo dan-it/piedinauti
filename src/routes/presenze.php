@@ -1,0 +1,9 @@
+<?php
+
+use App\Http\Controllers\Gestione\PresenzeController;
+use Illuminate\Support\Facades\Route;
+
+// Read-only view of attendance for managers and city administrators.
+Route::middleware('auth')->group(function () {
+    Route::get('presenze', [PresenzeController::class, 'index'])->name('presenze.index');
+});

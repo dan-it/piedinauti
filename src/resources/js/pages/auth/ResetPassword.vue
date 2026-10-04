@@ -31,13 +31,13 @@ const submit = () => {
 </script>
 
 <template>
-    <AuthLayout title="Reset password" description="Please enter your new password below">
-        <Head title="Reset password" />
+    <AuthLayout title="Scegli la tua password" description="Inserisci qui sotto la nuova password">
+        <Head title="Scegli la tua password" />
 
         <form @submit.prevent="submit">
             <div class="grid gap-6">
                 <div class="grid gap-2">
-                    <Label for="email">Email</Label>
+                    <Label for="email">Indirizzo email</Label>
                     <Input id="email" type="email" name="email" autocomplete="email" v-model="form.email" class="mt-1 block w-full" readonly />
                     <InputError :message="form.errors.email" class="mt-2" />
                 </div>
@@ -58,7 +58,7 @@ const submit = () => {
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="password_confirmation"> Confirm Password </Label>
+                    <Label for="password_confirmation">Conferma la password</Label>
                     <Input
                         id="password_confirmation"
                         type="password"
@@ -66,14 +66,14 @@ const submit = () => {
                         autocomplete="new-password"
                         v-model="form.password_confirmation"
                         class="mt-1 block w-full"
-                        placeholder="Confirm password"
+                        placeholder="Ripeti la password"
                     />
                     <InputError :message="form.errors.password_confirmation" />
                 </div>
 
                 <Button type="submit" class="mt-4 w-full" :disabled="form.processing">
                     <LoaderCircle v-if="form.processing" class="h-4 w-4 animate-spin" />
-                    Reset password
+                    Salva la password
                 </Button>
             </div>
         </form>

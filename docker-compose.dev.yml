@@ -32,6 +32,9 @@ services:
     image: piedinauti-app
     command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
     working_dir: /var/www/html
+    environment:
+      # Host name the browser uses to reach the Vite server (see vite.config.ts).
+      VITE_HMR_HOST: ${VITE_HMR_HOST:-localhost}
     volumes:
       - ./src:/var/www/html
     ports:

@@ -1,10 +1,12 @@
 <?php
 
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\ImpostaCittaCorrente;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -16,7 +18,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            // Keeps every request inside the signed-in user's city.
+            ImpostaCittaCorrente::class,
         ]);
+
+        // The city restriction must be active before Laravel loads models from the URL
+        // (SubstituteBindings): a record of another city is then simply "not found" (404).
+        $middleware->prependToPriorityList(before: SubstituteBindings::class, prepend: ImpostaCittaCorrente::class);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

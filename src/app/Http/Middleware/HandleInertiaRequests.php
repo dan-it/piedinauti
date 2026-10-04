@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\Ruolo;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -38,13 +39,25 @@ class HandleInertiaRequests extends Middleware
     {
         [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
 
-        return array_merge(parent::share($request), [
+        $utente = $request->user();
+
+        return [
             ...parent::share($request),
             'name' => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
-                'user' => $request->user(),
+                // The interface builds its menu from the roles, and shows the city name.
+                'user' => $utente === null ? null : [
+                    ...$utente->toArray(),
+                    'ruoli' => $utente->ruoli()->map(fn (Ruolo $ruolo) => $ruolo->value)->values()->all(),
+                    'citta_nome' => $utente->citta?->nome,
+                ],
             ],
-        ]);
+            // One-off messages shown after an action (success or error).
+            'flash' => [
+                'status' => fn () => $request->session()->get('status'),
+                'errore' => fn () => $request->session()->get('errore'),
+            ],
+        ];
     }
 }

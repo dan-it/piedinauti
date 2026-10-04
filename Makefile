@@ -1,3 +1,5 @@
+-include .env
+
 .PHONY: help bootstrap up down logs shell artisan composer npm test
 
 help: ## Show this help
@@ -27,5 +29,6 @@ composer: ## Run composer, e.g. make composer ARGS="require vendor/package"
 npm: ## Run npm, e.g. make npm ARGS="install"
 	docker compose exec app npm $(ARGS)
 
-test: ## Run the test suite
+test: ## Run the test suite (creates the piedinauti_test database if missing)
+	-@docker compose exec -T db createdb -U $(DB_USERNAME) piedinauti_test 2>/dev/null
 	docker compose exec app php artisan test
