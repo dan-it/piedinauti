@@ -1,0 +1,8 @@
+.git
+.env
+src/.env
+src/vendor
+src/node_modules
+src/public/build
+src/public/hot
+src/storage/logs

@@ -1,0 +1,70 @@
+# Services shared by development and production.
+# Environment-specific settings live in docker-compose.dev.yml and
+# docker-compose.prod.yml; the COMPOSE_FILE variable in .env selects them.
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-piedinauti}
+      POSTGRES_USER: ${DB_USERNAME:-piedinauti}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # PHP-FPM running Laravel. The queue and scheduler services reuse its image.
+  app:
+    image: piedinauti-app
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      args:
+        HOST_UID: ${HOST_UID:-1000}
+        HOST_GID: ${HOST_GID:-1000}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Web server: serves static files and forwards PHP requests to the app service.
+  web:
+    image: caddy:2-alpine
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  # Background worker for queued jobs (invitation and password reset emails).
+  queue:
+    image: piedinauti-app
+    command: ["php", "artisan", "queue:work", "--tries=3", "--sleep=3", "--max-time=3600"]
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  # Runs Laravel's scheduled tasks.
+  scheduler:
+    image: piedinauti-app
+    command: ["php", "artisan", "schedule:work"]
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:

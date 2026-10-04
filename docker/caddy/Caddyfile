@@ -1,0 +1,12 @@
+# SITE_ADDRESS is ":80" in development (plain HTTP) and the public domain
+# name in production, in which case Caddy obtains HTTPS certificates itself.
+{$SITE_ADDRESS} {
+	root * /var/www/html/public
+	encode zstd gzip
+
+	# Forward PHP requests to the PHP-FPM container.
+	php_fastcgi app:9000
+
+	# Serve static files (compiled assets, favicon, ...) directly.
+	file_server
+}

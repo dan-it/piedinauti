@@ -1,0 +1,47 @@
+# Development overrides: source code is bind-mounted from ./src so edits
+# show up immediately, and helper services (Vite, Mailpit) are added.
+
+services:
+  db:
+    ports:
+      # Exposed on localhost only, for GUI database clients.
+      - "127.0.0.1:5432:5432"
+
+  app:
+    build:
+      target: dev
+    volumes:
+      - ./src:/var/www/html
+
+  web:
+    volumes:
+      - ./src:/var/www/html:ro
+
+  queue:
+    # queue:listen reloads the code on every job, unlike queue:work.
+    command: ["php", "artisan", "queue:listen", "--tries=1"]
+    volumes:
+      - ./src:/var/www/html
+
+  scheduler:
+    volumes:
+      - ./src:/var/www/html
+
+  # Vite dev server with hot module replacement for the Vue frontend.
+  vite:
+    image: piedinauti-app
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+    working_dir: /var/www/html
+    volumes:
+      - ./src:/var/www/html
+    ports:
+      - "5173:5173"
+    depends_on:
+      - app
+
+  # Catches every email sent by the app; inbox at http://localhost:8026.
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "8026:8025"
+    restart: unless-stopped
