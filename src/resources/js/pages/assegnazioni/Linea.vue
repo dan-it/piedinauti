@@ -9,6 +9,7 @@ interface Fermata {
     id: number;
     nome: string;
     orario: string;
+    destinazione: boolean;
     accompagnatori: { nome: string; da: string | null }[];
     bambini: string[];
 }
@@ -41,12 +42,17 @@ const breadcrumbs: BreadcrumbItem[] = [
                         <span class="font-medium tabular-nums">{{ fermata.orario }}</span>
                         <span class="ml-2 font-medium">{{ fermata.nome }}</span>
                     </div>
-                    <Button variant="outline" size="sm" as-child>
+                    <span v-if="fermata.destinazione" class="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">Destinazione</span>
+                    <Button v-else variant="outline" size="sm" as-child>
                         <Link :href="route('assegnazioni.fermata', fermata.id)">Gestisci</Link>
                     </Button>
                 </div>
 
-                <div class="grid gap-3 text-sm sm:grid-cols-2">
+                <p v-if="fermata.destinazione" class="text-sm text-muted-foreground">
+                    Qui non sale nessun bambino: gli accompagnatori con il gruppo segnano solo «Arrivati».
+                </p>
+
+                <div v-else class="grid gap-3 text-sm sm:grid-cols-2">
                     <div>
                         <p class="mb-1 text-muted-foreground">Accompagnatori</p>
                         <p v-if="fermata.accompagnatori.length === 0" class="text-amber-700 dark:text-amber-400">Nessun accompagnatore</p>

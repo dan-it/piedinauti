@@ -74,6 +74,7 @@ class AssegnazioneController extends Controller
             'id' => $fermata->id,
             'nome' => $fermata->nome,
             'orario' => substr($fermata->orario, 0, 5),
+            'destinazione' => $fermata->destinazione,
             // Everybody present at the stop; "da" names the stop where a chaperone started, if earlier.
             'accompagnatori' => collect($coperture[$fermata->id])->map(fn (array $voce) => ['nome' => $voce['nome'], 'da' => $voce['da']])->all(),
             'bambini' => $this->nomiBambini($fermata->bambini),
@@ -88,10 +89,16 @@ class AssegnazioneController extends Controller
     /**
      * Manage one stop: its chaperones and its children.
      */
-    public function fermata(Request $request, Fermata $fermata): Response
+    public function fermata(Request $request, Fermata $fermata): Response|RedirectResponse
     {
         $this->soloResponsabiliEAdmin($request);
         Gate::authorize('gestireAssegnazioni', $fermata);
+
+        // Nobody boards at the destination and chaperones start earlier: nothing to manage here.
+        if ($fermata->destinazione) {
+            return to_route('assegnazioni.linea', $fermata->linea_id)
+                ->with('errore', 'Alla destinazione non si assegnano bambini né accompagnatori.');
+        }
 
         $linea = $fermata->linea;
         $ricerca = trim((string) $request->query('q', ''));
@@ -143,6 +150,7 @@ class AssegnazioneController extends Controller
     {
         $this->soloResponsabiliEAdmin($request);
         Gate::authorize('gestireAssegnazioni', $fermata);
+        $this->rifiutaDestinazione($fermata, 'accompagnatori');
 
         $dati = $request->validate([
             'accompagnatori' => ['array'],
@@ -195,6 +203,7 @@ class AssegnazioneController extends Controller
     {
         $this->soloResponsabiliEAdmin($request);
         Gate::authorize('gestireAssegnazioni', $fermata);
+        $this->rifiutaDestinazione($fermata, 'bambino_id');
 
         $dati = $request->validate(['bambino_id' => ['required', 'integer']]);
 
@@ -308,6 +317,16 @@ class AssegnazioneController extends Controller
     private function chiaveOrdine(Bambino $bambino): string
     {
         return mb_strtolower(($bambino->cognome !== '' ? $bambino->cognome : $bambino->nome).' '.$bambino->nome);
+    }
+
+    /**
+     * Nobody boards at the destination, and chaperones are assigned to the stop where they start.
+     */
+    private function rifiutaDestinazione(Fermata $fermata, string $campo): void
+    {
+        if ($fermata->destinazione) {
+            throw ValidationException::withMessages([$campo => 'Alla destinazione non si assegnano bambini né accompagnatori.']);
+        }
     }
 
     /**

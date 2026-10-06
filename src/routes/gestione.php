@@ -25,6 +25,7 @@ Route::middleware('auth')->group(function () {
     Route::get('amministratori/{utente}/edit', [AmministratoreController::class, 'edit'])->name('amministratori.edit');
     Route::put('amministratori/{utente}', [AmministratoreController::class, 'update'])->name('amministratori.update');
     Route::post('amministratori/{utente}/reinvia', [AmministratoreController::class, 'reinvia'])->name('amministratori.reinvia');
+    Route::post('amministratori/{utente}/revoca-ruolo-citta', [AmministratoreController::class, 'revocaRuoloCitta'])->name('amministratori.revoca');
     Route::delete('amministratori/{utente}', [AmministratoreController::class, 'destroy'])->name('amministratori.destroy');
 
     // City administrator: the people and the children of their city.
@@ -50,6 +51,7 @@ Route::middleware('auth')->group(function () {
     Route::get('linee/{linea}/edit', [LineaController::class, 'edit'])->name('linee.edit');
     Route::put('linee/{linea}', [LineaController::class, 'update'])->name('linee.update');
     Route::put('linee/{linea}/responsabili', [LineaController::class, 'aggiornaResponsabili'])->name('linee.responsabili');
+    Route::put('linee/{linea}/visibilita', [LineaController::class, 'aggiornaVisibilita'])->name('linee.visibilita');
     Route::delete('linee/{linea}', [LineaController::class, 'destroy'])->name('linee.destroy');
     Route::post('linee/{linea}/archivia', [LineaController::class, 'archivia'])->name('linee.archivia');
     Route::get('linee/{linea}/duplica', [LineaController::class, 'formDuplica'])->name('linee.duplica.form');

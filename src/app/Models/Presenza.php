@@ -17,8 +17,13 @@ class Presenza extends Model
 
     protected $fillable = [
         'citta_id', 'data', 'linea_id', 'fermata_id', 'bambino_id',
-        'presente', 'temporaneo', 'registrata_da',
+        'presente', 'temporaneo', 'registrata_da', 'registrata_il',
     ];
+
+    /**
+     * Not stored: true when registra() found a more recent mark already there and left it as it was.
+     */
+    public bool $ignorata = false;
 
     protected static function booted(): void
     {
@@ -32,12 +37,17 @@ class Presenza extends Model
             'data' => 'date',
             'presente' => 'boolean',
             'temporaneo' => 'boolean',
+            'registrata_il' => 'datetime',
         ];
     }
 
     /**
-     * Record (or correct) a child's attendance on a line for a day.
-     * Idempotent: repeating the call updates the same row instead of adding one.
+     * Record (or change) a child's attendance on a line for a day.
+     *
+     * Idempotent: repeating the call updates the same row instead of adding one. When a device
+     * sends marks late (no signal), $registrataIl is the moment the mark was really made: a mark
+     * older than the one already stored is ignored, so out-of-order arrival cannot undo a newer one.
+     * The returned model has $ignorata set when that happened.
      */
     public static function registra(
         Fermata $fermata,
@@ -46,21 +56,32 @@ class Presenza extends Model
         bool $presente,
         bool $temporaneo = false,
         ?User $registrataDa = null,
+        ?CarbonInterface $registrataIl = null,
     ): self {
-        return static::query()->updateOrCreate(
-            [
-                'data' => $data->toDateString(),
-                'linea_id' => $fermata->linea_id,
-                'bambino_id' => $bambino->id,
-            ],
-            [
-                'citta_id' => $fermata->citta_id,
-                'fermata_id' => $fermata->id,
-                'presente' => $presente,
-                'temporaneo' => $temporaneo,
-                'registrata_da' => $registrataDa?->id,
-            ],
-        );
+        $registrataIl ??= now();
+
+        $chiave = [
+            'data' => $data->toDateString(),
+            'linea_id' => $fermata->linea_id,
+            'bambino_id' => $bambino->id,
+        ];
+
+        $esistente = static::query()->where($chiave)->first();
+
+        if ($esistente !== null && $esistente->registrata_il !== null && $esistente->registrata_il->gt($registrataIl)) {
+            $esistente->ignorata = true;
+
+            return $esistente;
+        }
+
+        return static::query()->updateOrCreate($chiave, [
+            'citta_id' => $fermata->citta_id,
+            'fermata_id' => $fermata->id,
+            'presente' => $presente,
+            'temporaneo' => $temporaneo,
+            'registrata_da' => $registrataDa?->id,
+            'registrata_il' => $registrataIl,
+        ]);
     }
 
     /**

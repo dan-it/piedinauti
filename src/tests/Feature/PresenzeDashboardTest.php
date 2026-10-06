@@ -113,13 +113,15 @@ class PresenzeDashboardTest extends TestCase
 
     // ------------------------------------------------------------ access
 
-    public function test_solo_responsabili_e_amministratori_di_citta_accedono(): void
+    public function test_gli_accompagnatori_non_accedono(): void
     {
-        $globale = User::factory()->conRuolo(Ruolo::AdminGlobale)->create();
+        $this->actingAs($this->acc)->get('/presenze')->assertForbidden();
+    }
 
-        foreach ([$this->acc, $globale] as $utente) {
-            $this->actingAs($utente)->get('/presenze')->assertForbidden();
-        }
+    public function test_i_responsabili_guardano_senza_poter_modificare(): void
+    {
+        $this->actingAs($this->resp1)->get('/presenze')
+            ->assertInertia(fn (Assert $p) => $p->where('puo_modificare', false)->where('citte', []));
     }
 
     public function test_gli_ospiti_vanno_al_login(): void

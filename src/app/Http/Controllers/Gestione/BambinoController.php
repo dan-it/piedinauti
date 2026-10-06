@@ -65,8 +65,14 @@ class BambinoController extends Controller
 
         // The city is the administrator's own: the model fills it in, never the request.
         $bambino = Bambino::query()->create($this->validati($request));
+        $nome = trim("{$bambino->nome} {$bambino->cognome}");
 
-        return to_route('bambini.index')->with('status', "{$bambino->nome} {$bambino->cognome} aggiunto.");
+        // "Save and add another": back to an empty form, ready for the next child.
+        if ($request->boolean('continua')) {
+            return to_route('bambini.create')->with('status', "{$nome} aggiunto. Aggiungi il prossimo.");
+        }
+
+        return to_route('bambini.index')->with('status', "{$nome} aggiunto.");
     }
 
     public function edit(Request $request, Bambino $bambino): Response

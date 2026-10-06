@@ -17,7 +17,7 @@ class Fermata extends Model
 
     protected $table = 'fermate';
 
-    protected $fillable = ['citta_id', 'linea_id', 'nome', 'orario', 'ordine'];
+    protected $fillable = ['citta_id', 'linea_id', 'nome', 'orario', 'ordine', 'destinazione'];
 
     protected static function booted(): void
     {
@@ -27,7 +27,7 @@ class Fermata extends Model
 
     protected function casts(): array
     {
-        return ['ordine' => 'integer'];
+        return ['ordine' => 'integer', 'destinazione' => 'boolean'];
     }
 
     public function linea(): BelongsTo

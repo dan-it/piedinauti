@@ -6,6 +6,12 @@
 
         <title inertia>{{ config('app.name', 'Laravel') }}</title>
 
+        {{-- Installable on the home screen of a phone; works without signal (see public/sw.js) --}}
+        <link rel="manifest" href="/manifest.webmanifest">
+        <meta name="theme-color" content="#16a34a">
+        <link rel="icon" href="/favicon.ico" sizes="any">
+        <link rel="apple-touch-icon" href="/icons/icon-192.png">
+
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
 

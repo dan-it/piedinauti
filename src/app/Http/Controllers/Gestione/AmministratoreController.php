@@ -19,36 +19,58 @@ use Inertia\Response;
 
 /**
  * Administrators (global and city ones), managed by global administrators.
+ *
+ * The list also shows administrators who hold other roles (manager, chaperone): those other roles,
+ * and the people who hold only them, remain managed by city administrators. A global administrator
+ * can correct an administrator's data and take the city administrator role away, with a warning if
+ * the city is left without one.
  */
 class AmministratoreController extends Controller
 {
+    /** Roles that make a person appear in this list. */
+    private const RUOLI_AMMINISTRATORE = ['admin_globale', 'admin_citta'];
+
     public function index(Request $request): Response
     {
         $this->soloGlobali();
 
+        $utente = $request->user();
         $amministratori = User::query()
-            ->whereHas('ruoliAssegnati', fn ($query) => $query->whereIn('ruolo', [
-                Ruolo::AdminGlobale->value,
-                Ruolo::AdminCitta->value,
-            ]))
+            ->whereHas('ruoliAssegnati', fn ($query) => $query->whereIn('ruolo', self::RUOLI_AMMINISTRATORE))
             ->with(['citta', 'ruoliAssegnati'])
             ->orderBy('cognome')
             ->orderBy('nome')
             ->get()
-            // People who also hold other roles are managed by their city administrator.
-            ->filter(fn (User $persona) => $request->user()->can('view', $persona))
-            ->map(fn (User $persona) => [
-                'id' => $persona->id,
-                'nome' => $persona->nome,
-                'cognome' => $persona->cognome,
-                'email' => $persona->email,
-                'ruoli' => $persona->ruoli()->map(fn (Ruolo $ruolo) => $ruolo->etichetta())->values()->all(),
-                'citta' => $persona->citta?->nome,
-                'attivo' => $persona->password !== null,
-            ])
+            ->filter(fn (User $persona) => $utente->can('view', $persona))
+            ->map(function (User $persona) use ($utente) {
+                $ruoli = $this->ruoliOrdinati($persona);
+                // Roles that city administrators, not global ones, manage.
+                $altriRuoli = $ruoli->reject(fn (Ruolo $ruolo) => in_array($ruolo, [Ruolo::AdminGlobale, Ruolo::AdminCitta], true));
+
+                return [
+                    'id' => $persona->id,
+                    'nome' => $persona->nome,
+                    'cognome' => $persona->cognome,
+                    'email' => $persona->email,
+                    'ruoli' => $ruoli->map(fn (Ruolo $ruolo) => $ruolo->etichetta())->values()->all(),
+                    'altri_ruoli' => $altriRuoli->map(fn (Ruolo $ruolo) => $ruolo->etichetta())->values()->all(),
+                    'citta' => $persona->citta?->nome,
+                    'citta_id' => $persona->citta_id,
+                    'attivo' => $persona->password !== null,
+                    'sei_tu' => $persona->is($utente),
+                    // Delete only people whose roles are all administrator roles; revoke when other roles remain.
+                    'puo_eliminare' => $utente->can('delete', $persona),
+                    'puo_revocare' => $utente->can('revocareAmministratore', $persona) && $altriRuoli->isNotEmpty(),
+                ];
+            })
             ->values();
 
-        return Inertia::render('amministratori/Index', ['amministratori' => $amministratori]);
+        return Inertia::render('amministratori/Index', [
+            'amministratori' => $amministratori,
+            // For the city filter, and to flag the cities that have no administrator at all.
+            'citte' => $this->elencoCitta(),
+            'citte_senza_amministratori' => $this->citteSenzaAmministratori(),
+        ]);
     }
 
     public function create(): Response
@@ -157,9 +179,88 @@ class AmministratoreController extends Controller
             return back()->with('errore', 'Non si può eliminare l\'ultimo amministratore globale.');
         }
 
+        $cittaId = $utente->haRuolo(Ruolo::AdminCitta) ? $utente->citta_id : null;
+
         $utente->delete();
 
-        return to_route('amministratori.index')->with('status', 'Persona eliminata.');
+        return to_route('amministratori.index')
+            ->with('status', 'Persona eliminata.')
+            ->with('avviso', $this->avvisoCittaSenzaAmministratori($cittaId));
+    }
+
+    /**
+     * Take the city administrator role away from a person who holds other roles too (they keep them).
+     * A person whose only role this is is deleted instead. Warns if the city is left without administrators.
+     */
+    public function revocaRuoloCitta(User $utente): RedirectResponse
+    {
+        $this->soloGlobali();
+        Gate::authorize('revocareAmministratore', $utente);
+
+        $altriRuoli = $this->ruoliOrdinati($utente)->reject(fn (Ruolo $ruolo) => $ruolo === Ruolo::AdminCitta)->values();
+
+        if ($altriRuoli->isEmpty()) {
+            return back()->with('errore', 'Questa persona ha solo il ruolo di amministratore di città: per toglierglielo eliminala.');
+        }
+
+        $cittaId = $utente->citta_id;
+        $utente->rimuoviRuolo(Ruolo::AdminCitta);
+
+        $nome = trim("{$utente->nome} {$utente->cognome}");
+        $rimasti = $altriRuoli->map(fn (Ruolo $ruolo) => mb_strtolower($ruolo->etichetta()))->join(', ', ' e ');
+
+        return back()
+            ->with('status', "{$nome} non è più amministratore di città. Resta: {$rimasti}.")
+            ->with('avviso', $this->avvisoCittaSenzaAmministratori($cittaId));
+    }
+
+    /**
+     * The person's roles in a fixed order (global, city, manager, chaperone), whatever the database returns.
+     *
+     * @return \Illuminate\Support\Collection<int, Ruolo>
+     */
+    private function ruoliOrdinati(User $persona): \Illuminate\Support\Collection
+    {
+        return $persona->ruoli()
+            ->sortBy(fn (Ruolo $ruolo) => array_search($ruolo, Ruolo::cases(), true))
+            ->values();
+    }
+
+    /**
+     * A warning for the global administrator when a city has no city administrator any more, or null.
+     */
+    private function avvisoCittaSenzaAmministratori(?int $cittaId): ?string
+    {
+        if ($cittaId === null || $this->amministratoriDellaCitta($cittaId) > 0) {
+            return null;
+        }
+
+        $nome = Citta::query()->whereKey($cittaId)->value('nome');
+
+        return "Attenzione: la città «{$nome}» non ha più amministratori. Invitane uno nuovo, altrimenti nessuno potrà gestirla.";
+    }
+
+    private function amministratoriDellaCitta(int $cittaId): int
+    {
+        return User::query()
+            ->where('citta_id', $cittaId)
+            ->whereHas('ruoliAssegnati', fn ($query) => $query->where('ruolo', Ruolo::AdminCitta->value))
+            ->count();
+    }
+
+    /**
+     * Cities that have no city administrator.
+     *
+     * @return list<array{id: int, nome: string}>
+     */
+    private function citteSenzaAmministratori(): array
+    {
+        return Citta::query()
+            ->whereDoesntHave('utenti', fn ($query) => $query->whereHas('ruoliAssegnati', fn ($ruoli) => $ruoli->where('ruolo', Ruolo::AdminCitta->value)))
+            ->orderBy('nome')
+            ->get(['id', 'nome'])
+            ->map(fn (Citta $citta) => ['id' => $citta->id, 'nome' => $citta->nome])
+            ->all();
     }
 
     /**

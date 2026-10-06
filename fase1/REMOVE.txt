@@ -1,4 +1,0 @@
-app/Http/Controllers/Auth/RegisteredUserController.php
-resources/js/pages/auth/Register.vue
-resources/js/pages/Welcome.vue
-tests/Feature/Auth/RegistrationTest.php

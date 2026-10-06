@@ -9,7 +9,10 @@ use App\Models\User;
 /**
  * Who may see, invite and manage people.
  *
- * - Global administrators manage administrators only (global ones and city ones).
+ * - Global administrators see and edit the data of everybody who holds an administrator role (also
+ *   when that person holds other roles too), and can take the city administrator role away; they
+ *   delete only people whose roles are all administrator roles. Managers and chaperones are managed
+ *   by city administrators only.
  * - City administrators manage everybody in their own city, except global administrators.
  * - Managers may see the chaperones of their city, to assign them to stops.
  */
@@ -28,8 +31,9 @@ class UserPolicy
             return true;
         }
 
+        // A global administrator sees every administrator, including those with other roles too.
         if ($user->eAdminGlobale()) {
-            return $this->soloAmministratori($persona);
+            return $this->haRuoloAmministratore($persona);
         }
 
         if (! $user->appartieneACitta($persona->citta_id)) {
@@ -58,7 +62,23 @@ class UserPolicy
      */
     public function update(User $user, User $persona): bool
     {
+        // Name and email: global administrators can correct them for anybody holding an administrator role.
+        if ($user->eAdminGlobale()) {
+            return $this->haRuoloAmministratore($persona);
+        }
+
         return $this->puoGestire($user, $persona);
+    }
+
+    /**
+     * Take the city administrator role away from a person (they keep any other role).
+     * Only global administrators do this; roles of managers and chaperones are never theirs to change.
+     *
+     * Usage: $user->can('revocareAmministratore', $persona)
+     */
+    public function revocareAmministratore(User $user, User $persona): bool
+    {
+        return $user->eAdminGlobale() && $persona->haRuolo(Ruolo::AdminCitta);
     }
 
     /**
@@ -112,6 +132,14 @@ class UserPolicy
         return $user->eAdminCitta()
             && $user->appartieneACitta($cittaId)
             && ! in_array(Ruolo::AdminGlobale, $ruoli, true);
+    }
+
+    /**
+     * True when the person holds at least one administrator role (global or of a city).
+     */
+    private function haRuoloAmministratore(User $persona): bool
+    {
+        return $persona->haRuolo(Ruolo::AdminGlobale) || $persona->haRuolo(Ruolo::AdminCitta);
     }
 
     /**

@@ -20,7 +20,7 @@ class Linea extends Model
 
     protected $table = 'linee';
 
-    protected $fillable = ['citta_id', 'nome', 'archiviata_il'];
+    protected $fillable = ['citta_id', 'nome', 'archiviata_il', 'fermate_precedenti_visibili'];
 
     protected static function booted(): void
     {
@@ -30,7 +30,7 @@ class Linea extends Model
 
     protected function casts(): array
     {
-        return ['archiviata_il' => 'datetime'];
+        return ['archiviata_il' => 'datetime', 'fermate_precedenti_visibili' => 'integer'];
     }
 
     public function eArchiviata(): bool
@@ -75,8 +75,10 @@ class Linea extends Model
     public function riordinaFermate(): void
     {
         DB::transaction(function () {
+            // The destination is always the last stop, whatever its time; the others go by time.
             $ids = Fermata::query()
                 ->where('linea_id', $this->id)
+                ->orderBy('destinazione')
                 ->orderBy('orario')
                 ->orderBy('id')
                 ->pluck('id');
@@ -102,6 +104,14 @@ class Linea extends Model
         }
 
         return CarbonImmutable::parse($data->toDateString().' '.$ultima->orario, config('app.timezone'));
+    }
+
+    /**
+     * The special last stop where nobody boards and the chaperones mark "arrived", if the line has one.
+     */
+    public function destinazione(): ?Fermata
+    {
+        return Fermata::query()->where('linea_id', $this->id)->where('destinazione', true)->first();
     }
 
     public function presenze(): HasMany

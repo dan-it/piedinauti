@@ -10,12 +10,16 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
  * Stops of a line, managed by city administrators. Stops are always numbered in
  * order of time, so there is no separate "order" field to maintain.
+ *
+ * A line can have one special stop, the destination (for example the school): it is always the
+ * last one, nobody boards there, and the chaperones only mark "arrived".
  */
 class FermataController extends Controller
 {
@@ -27,6 +31,7 @@ class FermataController extends Controller
         return Inertia::render('fermate/Form', [
             'linea' => ['id' => $linea->id, 'nome' => $linea->nome],
             'fermata' => null,
+            'destinazione_esistente' => $linea->destinazione()?->nome,
         ]);
     }
 
@@ -35,7 +40,7 @@ class FermataController extends Controller
         $this->soloAdminCitta($request);
         Gate::authorize('create', [Fermata::class, $linea]);
 
-        $dati = $this->validati($request);
+        $dati = $this->validati($request, $linea);
 
         DB::transaction(function () use ($linea, $dati) {
             // Put the stop at the end, then number everything again by time.
@@ -45,6 +50,7 @@ class FermataController extends Controller
                 'nome' => $dati['nome'],
                 'orario' => $dati['orario'].':00',
                 'ordine' => ((int) Fermata::query()->where('linea_id', $linea->id)->max('ordine')) + 1,
+                'destinazione' => $dati['destinazione'],
             ]);
 
             $linea->riordinaFermate();
@@ -64,7 +70,14 @@ class FermataController extends Controller
                 'id' => $fermata->id,
                 'nome' => $fermata->nome,
                 'orario' => substr($fermata->orario, 0, 5),
+                'destinazione' => $fermata->destinazione,
             ],
+            // Another stop of the line that is already the destination (this one cannot be it too).
+            'destinazione_esistente' => Fermata::query()
+                ->where('linea_id', $fermata->linea_id)
+                ->where('destinazione', true)
+                ->whereKeyNot($fermata->id)
+                ->value('nome'),
         ]);
     }
 
@@ -73,10 +86,10 @@ class FermataController extends Controller
         $this->soloAdminCitta($request);
         Gate::authorize('update', $fermata);
 
-        $dati = $this->validati($request);
+        $dati = $this->validati($request, $fermata->linea, $fermata);
 
         DB::transaction(function () use ($fermata, $dati) {
-            $fermata->update(['nome' => $dati['nome'], 'orario' => $dati['orario'].':00']);
+            $fermata->update(['nome' => $dati['nome'], 'orario' => $dati['orario'].':00', 'destinazione' => $dati['destinazione']]);
             $fermata->linea->riordinaFermate();
         });
 
@@ -104,17 +117,58 @@ class FermataController extends Controller
     }
 
     /**
-     * @return array{nome: string, orario: string}
+     * Validate a stop, including the rules of the destination:
+     * a line has at most one, it is the last stop (never earlier than the others), and nobody
+     * is assigned to it.
+     *
+     * @return array{nome: string, orario: string, destinazione: bool}
      */
-    private function validati(Request $request): array
+    private function validati(Request $request, Linea $linea, ?Fermata $fermata = null): array
     {
         $request->merge(['nome' => trim((string) $request->input('nome'))]);
 
-        return $request->validate([
+        $dati = $request->validate([
             'nome' => ['required', 'string', 'max:255'],
             // 24-hour "HH:MM", as sent by a time field.
             'orario' => ['required', 'date_format:H:i'],
+            'destinazione' => ['boolean'],
         ]);
+
+        $dati['destinazione'] = (bool) ($dati['destinazione'] ?? false);
+        $orario = $dati['orario'].':00';
+
+        $altre = Fermata::query()
+            ->where('linea_id', $linea->id)
+            ->when($fermata, fn ($query) => $query->whereKeyNot($fermata->id))
+            ->get();
+        $attuale = $altre->firstWhere('destinazione', true);
+
+        if ($dati['destinazione']) {
+            if ($attuale !== null) {
+                throw ValidationException::withMessages([
+                    'destinazione' => "Questa linea ha già una destinazione («{$attuale->nome}»): ce ne può essere una sola.",
+                ]);
+            }
+
+            $ultima = $altre->max('orario');
+            if ($ultima !== null && $orario < $ultima) {
+                throw ValidationException::withMessages([
+                    'orario' => 'La destinazione è l\'ultima fermata: scegli un orario uguale o successivo a quello delle altre (ore '.substr($ultima, 0, 5).').',
+                ]);
+            }
+
+            if ($fermata !== null && ($fermata->bambini()->exists() || $fermata->accompagnatori()->exists())) {
+                throw ValidationException::withMessages([
+                    'destinazione' => 'Alla destinazione non si assegnano bambini né accompagnatori: toglili prima da questa fermata.',
+                ]);
+            }
+        } elseif ($attuale !== null && $orario > $attuale->orario) {
+            throw ValidationException::withMessages([
+                'orario' => 'Dopo la destinazione (ore '.substr($attuale->orario, 0, 5).') non ci sono altre fermate: scegli un orario precedente.',
+            ]);
+        }
+
+        return $dati;
     }
 
     private function soloAdminCitta(Request $request): void

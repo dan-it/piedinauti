@@ -4,7 +4,7 @@ import NavUser from '@/components/NavUser.vue';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
-import { Archive, Baby, Building2, CalendarCheck, ClipboardCheck, ClipboardList, Footprints, LayoutGrid, ShieldCheck, Users } from 'lucide-vue-next';
+import { Archive, Baby, Building2, CalendarCheck, ChartColumn, ClipboardCheck, ClipboardList, Footprints, LayoutGrid, ShieldCheck, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -29,9 +29,14 @@ const mainNavItems = computed<NavItem[]>(() => {
         voci.push({ title: 'Linee archiviate', href: route('linee-archiviate.index'), icon: Archive });
     }
 
-    // Managers and city administrators follow the attendance and assign chaperones and children.
-    if (ruoli.includes('admin_citta') || ruoli.includes('responsabile')) {
+    // Administrators and managers follow the attendance, day by day and over time.
+    if (ruoli.includes('admin_globale') || ruoli.includes('admin_citta') || ruoli.includes('responsabile')) {
         voci.push({ title: 'Presenze', href: route('presenze.index'), icon: ClipboardCheck });
+        voci.push({ title: 'Report', href: route('report.index'), icon: ChartColumn });
+    }
+
+    // Managers and city administrators assign chaperones and children to the stops.
+    if (ruoli.includes('admin_citta') || ruoli.includes('responsabile')) {
         voci.push({ title: 'Assegnazioni', href: route('assegnazioni.index'), icon: ClipboardList });
     }
 

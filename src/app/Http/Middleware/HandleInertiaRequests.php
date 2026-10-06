@@ -57,6 +57,8 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'status' => fn () => $request->session()->get('status'),
                 'errore' => fn () => $request->session()->get('errore'),
+                // A warning: the action went through, but something needs attention.
+                'avviso' => fn () => $request->session()->get('avviso'),
             ],
         ];
     }

@@ -12,7 +12,9 @@ import { LoaderCircle } from 'lucide-vue-next';
 // The same form adds a stop to a line (fermata = null) or edits an existing one.
 const props = defineProps<{
     linea: { id: number; nome: string };
-    fermata: { id: number; nome: string; orario: string } | null;
+    fermata: { id: number; nome: string; orario: string; destinazione: boolean } | null;
+    // Name of another stop of the line that is already its destination (a line has only one).
+    destinazione_esistente: string | null;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -24,6 +26,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nome: props.fermata?.nome ?? '',
     orario: props.fermata?.orario ?? '',
+    destinazione: props.fermata?.destinazione ?? false,
 });
 
 const submit = () => {
@@ -54,6 +57,22 @@ const submit = () => {
                     <Input id="orario" v-model="form.orario" type="time" required class="w-40" />
                     <InputError :message="form.errors.orario" />
                     <p class="text-sm text-muted-foreground">Le fermate della linea si riordinano da sole in base all'orario.</p>
+                </div>
+
+                <div class="grid gap-2">
+                    <label class="flex items-start gap-3 text-sm" :class="destinazione_esistente ? 'opacity-60' : ''">
+                        <input v-model="form.destinazione" type="checkbox" class="mt-1" :disabled="destinazione_esistente !== null && !form.destinazione" />
+                        <span>
+                            <span class="font-medium">È la destinazione (per esempio la scuola)</span>
+                            <span class="block text-muted-foreground">
+                                Ultima fermata della linea: nessun bambino sale qui, gli accompagnatori segnano solo «Arrivati» e viene salvato l'orario.
+                            </span>
+                        </span>
+                    </label>
+                    <p v-if="destinazione_esistente" class="text-sm text-muted-foreground">
+                        La destinazione di questa linea è già «{{ destinazione_esistente }}»: ce ne può essere una sola.
+                    </p>
+                    <InputError :message="form.errors.destinazione" />
                 </div>
 
                 <div class="flex items-center gap-4">

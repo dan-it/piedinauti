@@ -51,15 +51,16 @@ class DatabaseSeeder extends Seeder
         $linea->assegnaResponsabile($responsabile);
 
         $fermate = collect([
-            ['Parco giochi', '07:40:00'],
-            ['Via Roma', '07:50:00'],
-            ['Scuola', '08:05:00'],
+            ['Parco giochi', '07:40:00', false],
+            ['Via Roma', '07:50:00', false],
+            ['Scuola', '08:05:00', true], // the destination: nobody boards, the chaperones mark "arrived"
         ])->map(fn (array $dati, int $indice) => Fermata::factory()->create([
             'linea_id' => $linea->id,
             'citta_id' => $citta->id,
             'nome' => $dati[0],
             'orario' => $dati[1],
             'ordine' => $indice + 1,
+            'destinazione' => $dati[2],
         ]));
 
         $fermate[0]->assegnaAccompagnatore($accompagnatore);

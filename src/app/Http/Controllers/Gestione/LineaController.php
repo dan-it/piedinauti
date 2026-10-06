@@ -81,11 +81,12 @@ class LineaController extends Controller
             ->map(fn (User $persona) => ['id' => $persona->id, 'nome' => trim("{$persona->nome} {$persona->cognome}")]);
 
         return Inertia::render('linee/Edit', [
-            'linea' => ['id' => $linea->id, 'nome' => $linea->nome],
+            'linea' => ['id' => $linea->id, 'nome' => $linea->nome, 'fermate_precedenti_visibili' => $linea->fermate_precedenti_visibili],
             'fermate' => $linea->fermate->map(fn ($fermata) => [
                 'id' => $fermata->id,
                 'nome' => $fermata->nome,
                 'orario' => $this->orario($fermata->orario),
+                'destinazione' => $fermata->destinazione,
             ])->values(),
             'responsabili' => $responsabili,
             'assegnati' => $linea->responsabili()->pluck('users.id')->values(),
@@ -101,6 +102,29 @@ class LineaController extends Controller
         $linea->update(['nome' => trim($dati['nome'])]);
 
         return back()->with('status', 'Linea aggiornata.');
+    }
+
+    /**
+     * How many stops before their own the chaperones of this line can look at and mark.
+     */
+    public function aggiornaVisibilita(Request $request, Linea $linea): RedirectResponse
+    {
+        $this->soloAdminCitta($request);
+        Gate::authorize('update', $linea);
+
+        $dati = $request->validate([
+            'fermate_precedenti_visibili' => ['required', 'integer', 'min:0', 'max:99'],
+        ]);
+
+        $linea->update($dati);
+
+        $quante = (int) $dati['fermate_precedenti_visibili'];
+
+        return back()->with('status', match (true) {
+            $quante === 0 => 'Gli accompagnatori lavoreranno solo dalla loro fermata in poi.',
+            $quante === 1 => 'Gli accompagnatori potranno vedere e segnare 1 fermata prima della loro.',
+            default => "Gli accompagnatori potranno vedere e segnare {$quante} fermate prima della loro.",
+        });
     }
 
     /**
@@ -152,7 +176,7 @@ class LineaController extends Controller
     }
 
     /**
-     * Copy the line with all its stops (names, times and order). Managers, chaperones and
+     * Copy the line with all its stops (names, times, order and which one is the destination). Managers, chaperones and
      * children are not copied: the new line starts empty of people.
      */
     public function duplica(Request $request, Linea $linea): RedirectResponse
@@ -164,7 +188,7 @@ class LineaController extends Controller
 
         $nuova = DB::transaction(function () use ($linea, $dati) {
             // The city is the administrator's own: the model fills it in.
-            $nuova = Linea::query()->create(['nome' => trim($dati['nome'])]);
+            $nuova = Linea::query()->create(['nome' => trim($dati['nome']), 'fermate_precedenti_visibili' => $linea->fermate_precedenti_visibili]);
 
             foreach ($linea->fermate as $fermata) {
                 Fermata::query()->create([
@@ -173,6 +197,7 @@ class LineaController extends Controller
                     'nome' => $fermata->nome,
                     'orario' => $fermata->orario,
                     'ordine' => $fermata->ordine,
+                    'destinazione' => $fermata->destinazione,
                 ]);
             }
 

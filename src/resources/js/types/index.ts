@@ -22,7 +22,7 @@ export interface SharedData {
     name: string;
     quote: { message: string; author: string };
     auth: Auth;
-    flash: { status?: string | null; errore?: string | null };
+    flash: { status?: string | null; errore?: string | null; avviso?: string | null };
     ziggy: {
         location: string;
         url: string;

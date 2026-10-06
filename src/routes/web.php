@@ -30,3 +30,4 @@ require __DIR__.'/auth.php';
 require __DIR__.'/gestione.php';
 require __DIR__.'/accompagnatore.php';
 require __DIR__.'/presenze.php';
+require __DIR__.'/report.php';

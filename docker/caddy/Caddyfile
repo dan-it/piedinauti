@@ -7,6 +7,11 @@
 	# Forward PHP requests to the PHP-FPM container.
 	php_fastcgi app:9000
 
+	# The service worker and the manifest are checked by the browser at every visit,
+	# so a new version reaches the phones quickly.
+	@sw path /sw.js /manifest.webmanifest
+	header @sw Cache-Control "no-cache"
+
 	# Serve static files (compiled assets, favicon, ...) directly.
 	file_server
 }

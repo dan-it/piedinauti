@@ -14,6 +14,7 @@ interface Fermata {
     id: number;
     nome: string;
     orario: string;
+    destinazione: boolean;
 }
 
 interface Persona {
@@ -22,7 +23,7 @@ interface Persona {
 }
 
 const props = defineProps<{
-    linea: { id: number; nome: string };
+    linea: { id: number; nome: string; fermate_precedenti_visibili: number };
     fermate: Fermata[];
     responsabili: Persona[];
     assegnati: number[];
@@ -35,8 +36,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const formNome = useForm({ nome: props.linea.nome });
 const formResponsabili = useForm({ responsabili: [...props.assegnati] });
+const formVisibilita = useForm({ fermate_precedenti_visibili: props.linea.fermate_precedenti_visibili });
 
 const salvaNome = () => formNome.put(route('linee.update', props.linea.id), { preserveScroll: true });
+const salvaVisibilita = () => formVisibilita.put(route('linee.visibilita', props.linea.id), { preserveScroll: true });
 const salvaResponsabili = () => formResponsabili.put(route('linee.responsabili', props.linea.id), { preserveScroll: true });
 
 const eliminaFermata = (fermata: Fermata) => {
@@ -112,7 +115,10 @@ const eliminaLinea = () => {
                         <tbody>
                             <tr v-for="fermata in fermate" :key="fermata.id" class="border-t">
                                 <td class="px-4 py-3 font-medium tabular-nums">{{ fermata.orario }}</td>
-                                <td class="px-4 py-3">{{ fermata.nome }}</td>
+                                <td class="px-4 py-3">
+                                    {{ fermata.nome }}
+                                    <span v-if="fermata.destinazione" class="ml-2 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">Destinazione</span>
+                                </td>
                                 <td class="whitespace-nowrap px-4 py-3 text-right">
                                     <Button variant="ghost" size="sm" as-child>
                                         <Link :href="route('fermate.edit', fermata.id)"><Pencil class="h-4 w-4" /> Modifica</Link>
@@ -144,6 +150,37 @@ const eliminaLinea = () => {
                     <Button type="submit" :disabled="formResponsabili.processing">
                         <LoaderCircle v-if="formResponsabili.processing" class="h-4 w-4 animate-spin" />
                         Salva i responsabili
+                    </Button>
+                </form>
+            </section>
+
+            <section class="space-y-4">
+                <HeadingSmall title="Fermate prima di quella di inizio" description="Oltre alle proprie fermate, gli accompagnatori possono lavorare anche su quelle appena prima." />
+
+                <form class="space-y-3" @submit.prevent="salvaVisibilita">
+                    <div class="flex flex-wrap items-center gap-2 text-sm">
+                        <label for="precedenti">Gli accompagnatori possono vedere</label>
+                        <Input
+                            id="precedenti"
+                            v-model.number="formVisibilita.fermate_precedenti_visibili"
+                            type="number"
+                            min="0"
+                            max="99"
+                            step="1"
+                            inputmode="numeric"
+                            class="w-20"
+                            required
+                        />
+                        <span>fermate prima della loro</span>
+                    </div>
+                    <InputError :message="formVisibilita.errors.fermate_precedenti_visibili" />
+                    <p class="text-sm text-muted-foreground">
+                        Su quelle fermate vedono i bambini e possono segnarli presenti o assenti (e aggiungerne uno per il giorno), come sulle proprie e con le stesse regole: fino a 30 minuti dopo
+                        l'arrivo previsto, anche senza connessione. Con 0 lavorano solo dalla propria fermata in poi e delle precedenti vedono solo nome e orario.
+                    </p>
+                    <Button type="submit" :disabled="formVisibilita.processing">
+                        <LoaderCircle v-if="formVisibilita.processing" class="h-4 w-4 animate-spin" />
+                        Salva
                     </Button>
                 </form>
             </section>

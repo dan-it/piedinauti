@@ -2,6 +2,9 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { chiamaJson } from '@/lib/chiamate';
+import { nuovaAzione } from '@/lib/coda';
+import { cercaLocale } from '@/lib/elencoBambini';
+import { accoda, rete } from '@/lib/rete';
 import { Check, Plus, X } from 'lucide-vue-next';
 import { onBeforeUnmount, ref } from 'vue';
 
@@ -30,55 +33,39 @@ interface Risultato {
 
 const props = defineProps<{
     fermata: FermataOggi;
+    // The day this screen is about (YYYY-MM-DD): kept with each tap so it can be shown again after a reload.
+    giorno: string;
     // True for the stop where the chaperone starts: from here on they stay with the group.
     inizio?: boolean;
+    // True for a stop before the chaperone's start that the line lets them work on.
+    precedente?: boolean;
     // False once 30 minutes have passed since the line's arrival: nothing can be changed any more.
     modificaAperta: boolean;
-}>();
-
-// The parent shows one overall "saving / saved / error" indicator.
-const emit = defineEmits<{
-    inizio: [];
-    fine: [errore: string | null];
 }>();
 
 const presenti = () => props.fermata.bambini.filter((bambino) => bambino.presente === true).length;
 const assenti = () => props.fermata.bambini.filter((bambino) => bambino.presente === false).length;
 const daSegnare = () => props.fermata.bambini.filter((bambino) => bambino.presente === null).length;
 
-// One tap = one request. The screen changes at once and goes back if the save fails.
+// One tap: the screen changes at once and the tap goes into the phone's outbox with the moment it
+// was made. It is sent now if there is signal, or later if not; the screen keeps working either way.
 const segna = async (bambino: BambinoOggi, presente: boolean) => {
-    if (!bambino.modificabile || bambino.presente === presente) {
+    if (!props.modificaAperta || !bambino.modificabile || bambino.presente === presente) {
         return;
     }
 
-    const precedente = bambino.presente;
     bambino.presente = presente;
-    emit('inizio');
+    bambino.altrove = null;
 
-    try {
-        const risposta = await chiamaJson<{ temporaneo: boolean }>(route('oggi.presenze', props.fermata.id), {
-            metodo: 'POST',
-            corpo: { bambino_id: bambino.id, presente },
-        });
-
-        if (!risposta.ok) {
-            bambino.presente = precedente;
-            // 403 = the correction window has closed: stop offering the buttons for this child.
-            if (risposta.stato === 403) {
-                bambino.modificabile = false;
-            }
-            emit('fine', risposta.dati.message ?? 'Non è stato possibile salvare. Riprova.');
-
-            return;
-        }
-
-        bambino.altrove = null;
-        emit('fine', null);
-    } catch {
-        bambino.presente = precedente;
-        emit('fine', 'Nessuna connessione: la presenza non è stata salvata. Riprova.');
-    }
+    await accoda(
+        nuovaAzione({
+            chiave: `p:${props.fermata.id}:${bambino.id}`,
+            tipo: 'presenza',
+            url: route('oggi.presenze', props.fermata.id),
+            corpo: { bambino_id: bambino.id, presente, registrata_il: new Date().toISOString() },
+            riferimento: { giorno: props.giorno, fermataId: props.fermata.id, bambinoId: bambino.id, presente },
+        }),
+    );
 };
 
 // Adding a child for today only: search the city's children and mark the chosen one present.
@@ -99,11 +86,24 @@ const cerca = () => {
 
     attesa = setTimeout(async () => {
         cercando.value = true;
+        const esclusi = new Set(props.fermata.bambini.map((bambino) => bambino.id));
+
         try {
+            // With signal the server answers (it also tells who is already at another stop today);
+            // without, the list saved on the phone does.
+            if (rete.offline || !navigator.onLine) {
+                risultati.value = (await cercaLocale(testo.value, esclusi)).map((bambino) => ({ ...bambino, altrove: null }));
+
+                return;
+            }
+
             const risposta = await chiamaJson<{ risultati: Risultato[] }>(route('oggi.cerca', props.fermata.id) + '?q=' + encodeURIComponent(testo.value.trim()));
-            risultati.value = risposta.ok ? risposta.dati.risultati : [];
+
+            risultati.value = risposta.ok
+                ? risposta.dati.risultati
+                : (await cercaLocale(testo.value, esclusi)).map((bambino) => ({ ...bambino, altrove: null }));
         } catch {
-            risultati.value = [];
+            risultati.value = (await cercaLocale(testo.value, esclusi)).map((bambino) => ({ ...bambino, altrove: null }));
         } finally {
             cercando.value = false;
         }
@@ -113,33 +113,26 @@ const cerca = () => {
 onBeforeUnmount(() => clearTimeout(attesa));
 
 const aggiungi = async (trovato: Risultato) => {
-    emit('inizio');
+    props.fermata.bambini.push({
+        id: trovato.id,
+        nome: trovato.nome,
+        presente: true,
+        temporaneo: true,
+        altrove: null,
+        modificabile: true,
+    });
+    risultati.value = risultati.value.filter((altro) => altro.id !== trovato.id);
 
-    try {
-        const risposta = await chiamaJson<{ temporaneo: boolean }>(route('oggi.presenze', props.fermata.id), {
-            metodo: 'POST',
-            corpo: { bambino_id: trovato.id, presente: true },
-        });
-
-        if (!risposta.ok) {
-            emit('fine', risposta.dati.message ?? 'Non è stato possibile aggiungere il bambino. Riprova.');
-
-            return;
-        }
-
-        props.fermata.bambini.push({
-            id: trovato.id,
-            nome: trovato.nome,
-            presente: true,
-            temporaneo: risposta.dati.temporaneo,
-            altrove: null,
-            modificabile: true,
-        });
-        risultati.value = risultati.value.filter((altro) => altro.id !== trovato.id);
-        emit('fine', null);
-    } catch {
-        emit('fine', 'Nessuna connessione: il bambino non è stato aggiunto. Riprova.');
-    }
+    await accoda(
+        nuovaAzione({
+            chiave: `p:${props.fermata.id}:${trovato.id}`,
+            tipo: 'presenza',
+            url: route('oggi.presenze', props.fermata.id),
+            corpo: { bambino_id: trovato.id, presente: true, registrata_il: new Date().toISOString() },
+            // The name is kept so the child can be shown again after a reload while the tap is still waiting.
+            riferimento: { giorno: props.giorno, fermataId: props.fermata.id, bambinoId: trovato.id, presente: true, nome: trovato.nome, temporaneo: true },
+        }),
+    );
 };
 
 const chiudiRicerca = () => {
@@ -155,6 +148,7 @@ const chiudiRicerca = () => {
             <h2 class="text-xl font-semibold">
                 <span class="tabular-nums">{{ fermata.orario }}</span> · {{ fermata.nome }}
                 <span v-if="inizio" class="ml-2 rounded-full bg-primary px-2 py-0.5 align-middle text-xs font-medium text-primary-foreground">Qui inizi</span>
+                <span v-else-if="precedente" class="ml-2 rounded-full bg-muted px-2 py-0.5 align-middle text-xs font-medium text-muted-foreground">Prima della tua partenza</span>
             </h2>
             <p class="text-sm text-muted-foreground">
                 {{ presenti() }} presenti · {{ assenti() }} assenti<span v-if="daSegnare() > 0"> · {{ daSegnare() }} da segnare</span>
@@ -179,7 +173,7 @@ const chiudiRicerca = () => {
                         size="lg"
                         :variant="bambino.presente === true ? 'default' : 'outline'"
                         :class="['h-14 text-base', bambino.presente === true ? 'bg-green-600 text-white hover:bg-green-600' : '']"
-                        :disabled="!bambino.modificabile"
+                        :disabled="!modificaAperta || !bambino.modificabile"
                         :aria-pressed="bambino.presente === true"
                         @click="segna(bambino, true)"
                     >
@@ -190,7 +184,7 @@ const chiudiRicerca = () => {
                         size="lg"
                         :variant="bambino.presente === false ? 'default' : 'outline'"
                         :class="['h-14 text-base', bambino.presente === false ? 'bg-red-600 text-white hover:bg-red-600' : '']"
-                        :disabled="!bambino.modificabile"
+                        :disabled="!modificaAperta || !bambino.modificabile"
                         :aria-pressed="bambino.presente === false"
                         @click="segna(bambino, false)"
                     >
@@ -198,7 +192,7 @@ const chiudiRicerca = () => {
                     </Button>
                 </div>
 
-                <p v-if="!bambino.modificabile" class="mt-2 text-sm text-muted-foreground">Tempo scaduto: la presenza non si può più modificare.</p>
+                <p v-if="!modificaAperta || !bambino.modificabile" class="mt-2 text-sm text-muted-foreground">Tempo scaduto: la presenza non si può più modificare.</p>
             </li>
         </ul>
 
@@ -221,6 +215,7 @@ const chiudiRicerca = () => {
                     <Button type="button" variant="ghost" size="lg" class="h-12" @click="chiudiRicerca">Chiudi</Button>
                 </div>
 
+                <p v-if="rete.offline" class="text-sm text-muted-foreground">Senza connessione: cerco nell'elenco salvato sul telefono.</p>
                 <p v-if="cercando" class="text-sm text-muted-foreground">Cerco…</p>
                 <p v-else-if="testo.trim().length >= 2 && risultati.length === 0" class="text-sm text-muted-foreground">
                     Nessun bambino trovato (o è già nell'elenco di questa fermata).

@@ -33,6 +33,14 @@ const eAccompagnatore = computed(() => utente.value.ruoli.includes('accompagnato
 
             <div v-if="eGlobale" class="grid gap-4 md:grid-cols-2">
                 <div class="rounded-xl border p-4">
+                    <h2 class="font-medium">Presenze e report</h2>
+                    <p class="mb-4 text-sm text-muted-foreground">Guarda e correggi le presenze, città per città, e consulta i report.</p>
+                    <div class="flex flex-wrap gap-2">
+                        <Button as-child><Link :href="route('presenze.index')">Presenze</Link></Button>
+                        <Button variant="outline" as-child><Link :href="route('report.index')">Report</Link></Button>
+                    </div>
+                </div>
+                <div class="rounded-xl border p-4">
                     <h2 class="font-medium">Città</h2>
                     <p class="mb-4 text-sm text-muted-foreground">Crea le città in cui opera il piedibus.</p>
                     <Button as-child><Link :href="route('citta.index')">Gestisci le città</Link></Button>
@@ -67,6 +75,11 @@ const eAccompagnatore = computed(() => utente.value.ruoli.includes('accompagnato
                     <h2 class="font-medium">Presenze</h2>
                     <p class="mb-4 text-sm text-muted-foreground">Chi c'è e chi manca a ogni fermata, giorno per giorno.</p>
                     <Button as-child><Link :href="route('presenze.index')">Guarda le presenze</Link></Button>
+                </div>
+                <div class="rounded-xl border p-4">
+                    <h2 class="font-medium">Report</h2>
+                    <p class="mb-4 text-sm text-muted-foreground">Frequenza per linea e per bambino in un periodo, con esportazione in CSV.</p>
+                    <Button as-child><Link :href="route('report.index')">Apri i report</Link></Button>
                 </div>
                 <div class="rounded-xl border p-4">
                     <h2 class="font-medium">Assegnazioni</h2>

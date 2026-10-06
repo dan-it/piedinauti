@@ -1,6 +1,4 @@
--include .env
-
-.PHONY: help bootstrap up down logs shell artisan composer npm test
+.PHONY: help bootstrap up down logs shell artisan composer npm test test-js
 
 help: ## Show this help
 	@grep -E '^[a-z]+:.*##' Makefile | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -29,6 +27,8 @@ composer: ## Run composer, e.g. make composer ARGS="require vendor/package"
 npm: ## Run npm, e.g. make npm ARGS="install"
 	docker compose exec app npm $(ARGS)
 
-test: ## Run the test suite (creates the piedinauti_test database if missing)
-	-@docker compose exec -T db createdb -U $(DB_USERNAME) piedinauti_test 2>/dev/null
+test-js: ## Test the phone's outbox, local search and service worker (no browser needed)
+	docker compose exec -T app bash tests/js/eseguire.sh
+
+test: ## Run the test suite
 	docker compose exec app php artisan test

@@ -162,6 +162,45 @@ class User extends Authenticatable
     }
 
     /**
+     * Whether the chaperone can work on a stop (look at it and mark attendance there): the stops where
+     * they are present, plus - if the line allows it - the few stops just before their starting stop.
+     *
+     * The line's setting says how many: with 2, the two stops right before the starting stop. On those
+     * stops the chaperone works exactly as on their own, under the same rules (the modification window,
+     * working without signal, adding a child for the day).
+     */
+    public function puoOperareSu(Fermata $fermata): bool
+    {
+        if ($this->eAccompagnatoreDi($fermata)) {
+            return true;
+        }
+
+        $quante = (int) ($fermata->linea?->fermate_precedenti_visibili ?? 0);
+
+        if ($quante <= 0 || ! $this->haRuolo(Ruolo::Accompagnatore)) {
+            return false;
+        }
+
+        $inizio = $this->fermateAccompagnatore()
+            ->where('fermate.linea_id', $fermata->linea_id)
+            ->orderBy('fermate.ordine')
+            ->first();
+
+        if ($inizio === null || $fermata->ordine >= $inizio->ordine) {
+            return false;
+        }
+
+        // How many stops from this one up to the starting stop (not included).
+        $distanza = Fermata::query()
+            ->where('linea_id', $fermata->linea_id)
+            ->where('ordine', '>=', $fermata->ordine)
+            ->where('ordine', '<', $inizio->ordine)
+            ->count();
+
+        return $distanza <= $quante;
+    }
+
+    /**
      * Every stop where the chaperone is present: from their starting stop to the end of each line.
      *
      * @return Builder<Fermata>

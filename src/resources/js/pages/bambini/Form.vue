@@ -20,15 +20,34 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nome: props.bambino?.nome ?? '',
     cognome: props.bambino?.cognome ?? '',
+    // True for "Save and add another": the server sends us back to an empty form.
+    continua: false as boolean,
 });
 
-const submit = () => {
+// Saves the child. With `continua` the form is emptied and the cursor goes back to the first field.
+const salva = (continua: boolean) => {
+    form.continua = continua;
+
     if (props.bambino) {
         form.put(route('bambini.update', props.bambino.id));
-    } else {
-        form.post(route('bambini.store'));
+
+        return;
     }
+
+    form.post(route('bambini.store'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            if (continua) {
+                form.reset();
+                form.clearErrors();
+                document.getElementById('nome')?.focus();
+            }
+        },
+    });
 };
+
+// Pressing Enter submits the form: when adding, that means "Save and add another".
+const invio = () => salva(!props.bambino);
 </script>
 
 <template>
@@ -38,7 +57,7 @@ const submit = () => {
         <div class="flex max-w-xl flex-col gap-6 p-4">
             <Heading :title="bambino ? 'Modifica bambino' : 'Aggiungi un bambino'" />
 
-            <form class="space-y-6" @submit.prevent="submit">
+            <form class="space-y-6" @submit.prevent="invio">
                 <div class="grid gap-2">
                     <Label for="nome">Nome</Label>
                     <Input id="nome" v-model="form.nome" required autofocus autocomplete="off" />
@@ -51,11 +70,19 @@ const submit = () => {
                     <InputError :message="form.errors.cognome" />
                 </div>
 
-                <div class="flex items-center gap-4">
-                    <Button type="submit" :disabled="form.processing">
+                <div class="flex flex-wrap items-center gap-3">
+                    <!-- The only submit button when adding: it is what Enter presses. -->
+                    <Button v-if="!bambino" type="submit" :disabled="form.processing">
+                        <LoaderCircle v-if="form.processing" class="h-4 w-4 animate-spin" />
+                        Salva e aggiungi un altro
+                    </Button>
+                    <Button v-if="!bambino" type="button" variant="outline" :disabled="form.processing" @click="salva(false)">Salva</Button>
+
+                    <Button v-else type="submit" :disabled="form.processing">
                         <LoaderCircle v-if="form.processing" class="h-4 w-4 animate-spin" />
                         Salva
                     </Button>
+
                     <Button variant="ghost" as-child><Link :href="route('bambini.index')">Annulla</Link></Button>
                 </div>
             </form>
