@@ -1,0 +1,5 @@
+0027 - Rilascio tramite GitHub
+Nuovi:      .github/workflows/immagini.yml, scripts/aggiorna.sh
+Modificati: docker-compose.prod.yml, scripts/rollback.sh, scripts/crea-env-produzione.sh,
+            scripts/controlla-produzione.sh, docs/PRODUZIONE.md, README.md, .gitignore
+DA CANCELLARE (sostituito da aggiorna.sh):  git rm scripts/distribuisci.sh

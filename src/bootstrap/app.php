@@ -15,6 +15,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // The app runs behind Caddy (inside the Docker network), which terminates HTTPS and forwards
+        // X-Forwarded-Proto / X-Forwarded-For. Trusting it makes Laravel see the real scheme and client:
+        // without this, generated links and cookies would think the site is plain http. Only the
+        // web container can reach the app (its port is not published), so trusting every proxy is safe here.
+        $middleware->trustProxies(at: '*');
+
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,

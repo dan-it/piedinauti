@@ -1,33 +1,79 @@
-# Production overrides: code is baked into the images, configuration comes
-# from src/.env, and Caddy gets its own image containing the built assets.
+# Production overrides: the code is baked into images that GitHub Actions builds and publishes on ghcr.io
+# (.github/workflows/immagini.yml); the server only downloads them, it never compiles anything.
+# Configuration comes from src/.env, and Caddy gets its own image containing the built assets.
+#
+# Which version runs is IMMAGINE_TAG in .env (sha-<first 7 characters of the commit>); scripts/aggiorna.sh
+# sets it, scripts/rollback.sh puts the previous one back. GITHUB_PROPRIETARIO is the (lowercase) GitHub
+# user or organization that owns the repository.
+#
+# Selected by COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml in .env
+# (scripts/crea-env-produzione.sh writes that for you).
+
+# Container logs are rotated, so they never fill the disk: 5 files of 10 MB per service.
+x-immagini: &immagine-app
+  image: ghcr.io/${GITHUB_PROPRIETARIO:?Set GITHUB_PROPRIETARIO in .env}/piedinauti-app:${IMMAGINE_TAG:-latest}
+  pull_policy: missing
+  build: !reset null
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
 
 services:
+  db:
+    logging: *logging
+    # The database is not published on any port: only the other containers reach it.
+
   app:
-    build:
-      target: prod
+    <<: *immagine-app
     env_file: ./src/.env
     environment:
       # Only this service runs database migrations at startup.
       RUN_MIGRATIONS: "true"
     volumes:
       - app_storage:/var/www/html/storage
+    # PHP-FPM starts listening only after the migrations have finished, so "healthy" means "ready".
+    # The other services wait for it: no worker or web request sees a half-migrated database.
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/9000'"]
+      interval: 10s
+      timeout: 3s
+      retries: 18
+      start_period: 120s
+    logging: *logging
 
   web:
-    image: piedinauti-web
-    build:
-      context: .
-      dockerfile: docker/php/Dockerfile
-      target: web
+    image: ghcr.io/${GITHUB_PROPRIETARIO:?Set GITHUB_PROPRIETARIO in .env}/piedinauti-web:${IMMAGINE_TAG:-latest}
+    pull_policy: missing
+    ports:
+      # HTTP/3 uses UDP on the HTTPS port.
+      - "${HTTPS_PORT:-443}:443/udp"
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *logging
 
   queue:
+    <<: *immagine-app
     env_file: ./src/.env
     volumes:
       - app_storage:/var/www/html/storage
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *logging
 
   scheduler:
+    <<: *immagine-app
     env_file: ./src/.env
     volumes:
       - app_storage:/var/www/html/storage
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *logging
 
 volumes:
   # Logs, sessions' files and cache shared by app, queue and scheduler.

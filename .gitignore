@@ -1,1 +1,5 @@
 .env
+.env.prima-di-rls
+src/.env.prima-di-rls
+backups/
+.immagine-precedente

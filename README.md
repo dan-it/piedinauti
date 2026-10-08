@@ -35,16 +35,20 @@ Se l'aggiornamento automatico della pagina (HMR di Vite) non si collega dal brow
 
 ## Produzione
 
-1. Copia `.env.example` in `.env` e imposta `COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml`,
-   `HTTP_PORT=80`, `HTTPS_PORT=443`, `SITE_ADDRESS` (il dominio) e una `DB_PASSWORD` robusta.
-2. Prepara `src/.env` con `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL`, `APP_KEY` e le
-   impostazioni SMTP reali (le stesse credenziali del database di `.env`).
-3. `docker compose up -d --build`: le migrazioni partono da sole all'avvio del servizio `app`.
+Il codice sta su GitHub; **GitHub Actions** (`.github/workflows/immagini.yml`) costruisce le immagini e le
+pubblica su ghcr.io; il server fa `git pull` e le scarica con `./scripts/aggiorna.sh`. Guida completa, dal VPS
+vuoto al primo amministratore, ai backup: [docs/PRODUZIONE.md](docs/PRODUZIONE.md).
+
+```bash
+# sul server, una volta: git clone, docker login ghcr.io, poi
+./scripts/crea-env-produzione.sh piedinauti.it   # crea .env e src/.env (poi imposta MAIL_* in src/.env)
+./scripts/controlla-produzione.sh                # controlli prima del primo avvio
+./scripts/aggiorna.sh                            # primo avvio e ogni aggiornamento
+```
 
 Caddy ottiene e rinnova da solo i certificati HTTPS: servono i DNS del dominio già puntati sul server
 e le porte 80 e 443 aperte.
 
 ## Stato
 
-Fase 0 (preparazione). Questa configurazione non è ancora stata provata su un host Docker reale:
-il primo `make bootstrap` è il collaudo.
+In sviluppo attivo. La configurazione di produzione è descritta in `docs/PRODUZIONE.md`.

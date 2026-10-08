@@ -1,11 +1,36 @@
-# SITE_ADDRESS is ":80" in development (plain HTTP) and the public domain
-# name in production, in which case Caddy obtains HTTPS certificates itself.
+# SITE_ADDRESS is ":80" in development (plain HTTP) and the public domain name in production,
+# in which case Caddy obtains and renews the HTTPS certificate by itself.
 {$SITE_ADDRESS} {
 	root * /var/www/html/public
 	encode zstd gzip
 
+	# Security headers, on every response.
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), camera=(), microphone=(), payment=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		# Do not advertise the web server.
+		-Server
+	}
+
+	# Tell browsers to use HTTPS only (sent only over HTTPS, so it never affects development).
+	# One year; "includeSubDomains" and "preload" are left out on purpose until they are really wanted.
+	@https protocol https
+	header @https Strict-Transport-Security "max-age=31536000"
+
+	# Requests are small forms and JSON: refuse anything bigger than the PHP limit.
+	request_body {
+		max_size 10MB
+	}
+
 	# Forward PHP requests to the PHP-FPM container.
 	php_fastcgi app:9000
+
+	# Built files have a content hash in their name: they never change, so browsers may keep them.
+	@assets path /build/assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
 
 	# The service worker and the manifest are checked by the browser at every visit,
 	# so a new version reaches the phones quickly.

@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Citta;
 use App\Models\RuoloUtente;
 use App\Models\User;
+use App\Rules\EmailNonUsata;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -93,7 +94,7 @@ class AmministratoreController extends Controller
         $dati = $request->validate([
             'nome' => ['required', 'string', 'max:255'],
             'cognome' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['required', 'string', 'email', 'max:255', new EmailNonUsata],
             'tipo' => ['required', Rule::in(['globale', 'citta'])],
             'citta_id' => ['required_if:tipo,citta', 'nullable', 'integer', 'exists:citta,id'],
         ]);
@@ -136,7 +137,7 @@ class AmministratoreController extends Controller
         $dati = $request->validate([
             'nome' => ['required', 'string', 'max:255'],
             'cognome' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($utente->id)],
+            'email' => ['required', 'string', 'email', 'max:255', new EmailNonUsata($utente->id)],
         ]);
 
         $emailCambiata = $dati['email'] !== $utente->email;

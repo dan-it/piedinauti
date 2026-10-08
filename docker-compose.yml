@@ -3,14 +3,21 @@
 # docker-compose.prod.yml; the COMPOSE_FILE variable in .env selects them.
 
 services:
+  # PostgreSQL with two roles (see docs/RLS.md):
+  #   DB_ADMIN_USER  the administrator (superuser): backups and maintenance, never used by Laravel;
+  #   DB_USERNAME    the application role, created on the first start by docker/db/init. It owns the
+  #                  database and is what Laravel connects as. It cannot skip row-level security.
   db:
     image: postgres:17-alpine
     environment:
       POSTGRES_DB: ${DB_DATABASE:-piedinauti}
-      POSTGRES_USER: ${DB_USERNAME:-piedinauti}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      POSTGRES_USER: ${DB_ADMIN_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD:?Set DB_ADMIN_PASSWORD in .env}
+      APP_DB_USER: ${DB_USERNAME:?Set DB_USERNAME in .env}
+      APP_DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     volumes:
       - db_data:/var/lib/postgresql/data
+      - ./docker/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -45,7 +52,8 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - app
+      app:
+        condition: service_started
     restart: unless-stopped
 
   # Background worker for queued jobs (invitation and password reset emails).
@@ -53,7 +61,8 @@ services:
     image: piedinauti-app
     command: ["php", "artisan", "queue:work", "--tries=3", "--sleep=3", "--max-time=3600"]
     depends_on:
-      - app
+      app:
+        condition: service_started
     restart: unless-stopped
 
   # Runs Laravel's scheduled tasks.
@@ -61,7 +70,8 @@ services:
     image: piedinauti-app
     command: ["php", "artisan", "schedule:work"]
     depends_on:
-      - app
+      app:
+        condition: service_started
     restart: unless-stopped
 
 volumes:
